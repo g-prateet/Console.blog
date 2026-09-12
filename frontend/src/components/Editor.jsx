@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+import { API_URL } from '../config';
 
 export default function Editor({ postToEdit, onSave, onCancel }) {
   const [formData, setFormData] = useState({
