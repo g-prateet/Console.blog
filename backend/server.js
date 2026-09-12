@@ -8,7 +8,9 @@ const app = express();
 const port = process.env.PORT || 5000;
 const upload = multer({ storage: multer.memoryStorage() });
 
-app.use(cors());
+app.use(cors({
+  origin: ["https://console-blog-five.vercel.app/", "http://localhost:5173"],
+}));
 app.use(express.json());
 
 // Initialize Supabase client
