@@ -1,0 +1,105 @@
+@import "tailwindcss";
+@custom-variant dark (&:is(.dark, .dark *));
+
+@theme {
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+@layer base {
+  html {
+    /* Dramatically scaling up the entire website UI as requested */
+    font-size: 25px;
+  }
+  
+  /* Dark mode specific global overrides */
+  html.dark body {
+    background-color: #1a1c1a;
+    color: #e5e7eb;
+  }
+}
+
+/* 1. Increase font size for the Markdown typing area */
+/* --- OVERRIDES FOR REACT-MD-EDITOR --- */
+
+.ql-container .ql-editor {
+    font-size: 25px !important;
+    line-height: 1.6 !important;
+}
+
+/* 2. Toolbar Button Click Area */
+.ql-toolbar.ql-snow button {
+    width: 34px !important;  /* Increases the clickable space */
+    height: 34px !important;
+}
+
+/* 3. Toolbar Icon Sizes (the actual SVG drawings inside the buttons) */
+.ql-toolbar.ql-snow button svg {
+    width: 22px !important;  /* Makes the icons visually larger */
+    height: 22px !important;
+}
+
+/* 4. Toolbar Dropdown Menu Text (e.g., the "Normal" header selector) */
+.ql-toolbar.ql-snow .ql-picker-label, 
+.ql-toolbar.ql-snow .ql-picker-item {
+    font-size: 16px !important;
+}
+
+/* --- OVERRIDES FOR CUSTOM QUILL THEME --- */
+.custom-quill-editor .ql-toolbar.ql-snow {
+  border: none !important;
+  border-bottom: 1px solid rgba(165, 153, 181, 0.4) !important;
+  background-color: rgba(205, 221, 221, 0.2);
+  padding: 12px 16px !important;
+  border-radius: 8px 8px 0 0 !important;
+}
+
+.custom-quill-editor .ql-container.ql-snow {
+  border: none !important;
+}
+
+/* Rounded buttons and hover states */
+.custom-quill-editor .ql-toolbar.ql-snow button {
+  border-radius: 6px !important;
+  margin-right: 4px !important;
+  transition: all 0.2s ease !important;
+}
+
+.custom-quill-editor .ql-toolbar.ql-snow button:hover {
+  background-color: rgba(165, 153, 181, 0.15) !important;
+}
+
+.custom-quill-editor .ql-toolbar.ql-snow button:hover .ql-stroke {
+  stroke: #007EA7 !important;
+}
+
+.custom-quill-editor .ql-toolbar.ql-snow button:hover .ql-fill {
+  fill: #007EA7 !important;
+}
+
+/* Active states */
+.custom-quill-editor .ql-toolbar.ql-snow button.ql-active {
+  background-color: rgba(0, 126, 167, 0.1) !important;
+}
+
+.custom-quill-editor .ql-toolbar.ql-snow button.ql-active .ql-stroke {
+  stroke: #007EA7 !important;
+}
+
+.custom-quill-editor .ql-toolbar.ql-snow button.ql-active .ql-fill {
+  fill: #007EA7 !important;
+}
+
+/* Dropdown styling */
+.custom-quill-editor .ql-toolbar.ql-snow .ql-picker-label {
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+.custom-quill-editor .ql-toolbar.ql-snow .ql-picker-label:hover {
+  color: #007EA7 !important;
+}
+
+.custom-quill-editor .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-label {
+  border: none !important;
+  color: #007EA7 !important;
+}
