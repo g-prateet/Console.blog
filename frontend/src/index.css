@@ -103,3 +103,67 @@
   border: none !important;
   color: #007EA7 !important;
 }
+/* -----------------------------------------------------------------
+   DARK MODE OVERRIDES FOR REACT-QUILL
+   ----------------------------------------------------------------- */
+.dark .custom-quill-editor .ql-toolbar.ql-snow {
+  background-color: rgba(42, 46, 44, 0.6) !important;
+  border-bottom: 1px solid rgba(165, 153, 181, 0.2) !important;
+}
+
+/* Default icon colors in dark mode */
+.dark .custom-quill-editor .ql-toolbar.ql-snow .ql-stroke {
+  stroke: #EAE7E1 !important;
+}
+.dark .custom-quill-editor .ql-toolbar.ql-snow .ql-fill {
+  fill: #EAE7E1 !important;
+}
+
+/* Dropdown labels and arrows in dark mode */
+.dark .custom-quill-editor .ql-toolbar.ql-snow .ql-picker-label {
+  color: #EAE7E1 !important;
+}
+.dark .custom-quill-editor .ql-toolbar.ql-snow .ql-picker-label .ql-stroke {
+  stroke: #EAE7E1 !important;
+}
+
+/* Dropdown expanded panel (the menu itself) */
+.dark .custom-quill-editor .ql-toolbar.ql-snow .ql-picker-options {
+  background-color: #343936 !important;
+  border: 1px solid rgba(165, 153, 181, 0.2) !important;
+}
+.dark .custom-quill-editor .ql-toolbar.ql-snow .ql-picker-item {
+  color: #EAE7E1 !important;
+}
+
+/* Hover States in Dark Mode */
+.dark .custom-quill-editor .ql-toolbar.ql-snow button:hover {
+  background-color: rgba(165, 153, 181, 0.2) !important;
+}
+.dark .custom-quill-editor .ql-toolbar.ql-snow button:hover .ql-stroke,
+.dark .custom-quill-editor .ql-toolbar.ql-snow .ql-picker-label:hover,
+.dark .custom-quill-editor .ql-toolbar.ql-snow .ql-picker-label:hover .ql-stroke,
+.dark .custom-quill-editor .ql-toolbar.ql-snow .ql-picker-item:hover {
+  stroke: #7EA873 !important;
+  color: #7EA873 !important;
+}
+.dark .custom-quill-editor .ql-toolbar.ql-snow button:hover .ql-fill {
+  fill: #7EA873 !important;
+}
+
+/* Active States in Dark Mode */
+.dark .custom-quill-editor .ql-toolbar.ql-snow button.ql-active {
+  background-color: rgba(126, 168, 115, 0.15) !important;
+}
+.dark .custom-quill-editor .ql-toolbar.ql-snow button.ql-active .ql-stroke,
+.dark .custom-quill-editor .ql-toolbar.ql-snow .ql-picker-label.ql-active,
+.dark .custom-quill-editor .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-label,
+.dark .custom-quill-editor .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-label .ql-stroke,
+.dark .custom-quill-editor .ql-toolbar.ql-snow .ql-picker-item.ql-selected {
+  stroke: #7EA873 !important;
+  color: #7EA873 !important;
+}
+.dark .custom-quill-editor .ql-toolbar.ql-snow button.ql-active .ql-fill {
+  fill: #7EA873 !important;
+}
+

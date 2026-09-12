@@ -19,13 +19,13 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Create a new post
 // CREATE: Add a new post with tags
 app.post('/api/posts', async (req, res) => {
-  const { title, content, published, tags } = req.body; 
+  const { title, content, published, tags, cover_image_url } = req.body; 
   // Expects 'tags' to be an array of strings: ['react', 'cloud']
 
   // 1. Insert the Post
   const { data: postData, error: postError } = await supabase
     .from('posts')
-    .insert([{ title, content, published }])
+    .insert([{ title, content, published, cover_image_url: cover_image_url || null }])
     .select()
     .single();
     
@@ -54,23 +54,17 @@ app.post('/api/posts', async (req, res) => {
 });
 
 // Retrieve all posts
-// READ: Fetch all posts, with optional tag filtering
+// READ: Fetch all posts, with optional tag filtering (AND logic) and search
 app.get('/api/posts', async (req, res) => {
-  const { tag } = req.query;
+  const { tag, search } = req.query;
 
-  // By default, fetch posts and their related tags
   let query = supabase.from('posts').select(`
     *,
     tags ( name )
-  `);
+  `).order('created_at', { ascending: false });
 
-  // If a '?tag=' query parameter exists, filter the results
-  if (tag) {
-    query = supabase.from('posts').select(`
-      *,
-      tags!inner ( name )
-    `).eq('tags.name', tag); 
-    // !inner forces the database to only return posts that successfully match the tag
+  if (search) {
+    query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
   }
 
   const { data, error } = await query;
@@ -78,7 +72,48 @@ app.get('/api/posts', async (req, res) => {
   if (error) {
       return res.status(500).json({ error: error.message });
   }
-  res.status(200).json(data);
+
+  let filteredData = data;
+
+  if (tag) {
+    const tagArray = tag.split(',');
+    filteredData = filteredData.filter(post => {
+      if (!post.tags) return false;
+      const postTagNames = post.tags.map(t => t.name);
+      return tagArray.every(t => postTagNames.includes(t));
+    });
+  }
+
+  res.status(200).json(filteredData);
+});
+
+// Retrieve all distinct tags that are currently in use by published posts
+app.get('/api/tags', async (req, res) => {
+  try {
+    // Query published posts and only select their tags via inner join.
+    // This dynamically filters out orphaned tags at query time.
+    const { data, error } = await supabase
+      .from('posts')
+      .select('tags!inner(name)')
+      .eq('published', true);
+
+    if (error) throw error;
+
+    // Flatten and deduplicate the tags
+    const uniqueTags = new Set();
+    if (data) {
+      data.forEach(post => {
+        if (post.tags) {
+          post.tags.forEach(t => uniqueTags.add(t.name));
+        }
+      });
+    }
+
+    // Sort alphabetically and return
+    res.status(200).json(Array.from(uniqueTags).sort());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Retrieve a specific post
@@ -87,7 +122,7 @@ app.get('/api/posts/:id', async (req, res) => {
     const { id } = req.params;
     const { data, error } = await supabase
       .from('posts')
-      .select('*')
+      .select('*, tags(name)')
       .eq('id', id)
       .single();
 
@@ -95,6 +130,54 @@ app.get('/api/posts/:id', async (req, res) => {
     if (!data) return res.status(404).json({ error: 'Post not found' });
     
     res.status(200).json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Retrieve related posts based on shared tags
+app.get('/api/posts/:id/related', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // First get the tags for the current post
+    const { data: post, error: postError } = await supabase
+      .from('posts')
+      .select('tags(name)')
+      .eq('id', id)
+      .single();
+
+    if (postError) throw postError;
+    if (!post || !post.tags || post.tags.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    const tagNames = post.tags.map(t => t.name);
+
+    // Find other published posts that share at least one tag
+    const { data: relatedPosts, error: relatedError } = await supabase
+      .from('posts')
+      .select('*, tags!inner(name)')
+      .in('tags.name', tagNames)
+      .eq('published', true)
+      .neq('id', id)
+      .order('created_at', { ascending: false });
+
+    if (relatedError) throw relatedError;
+
+    // Since a post could match multiple tags and might be duplicated or just have matched tags returned, 
+    // we take the first 3 unique posts.
+    const uniquePosts = [];
+    const seenIds = new Set();
+    for (const p of relatedPosts) {
+      if (!seenIds.has(p.id)) {
+        seenIds.add(p.id);
+        uniquePosts.push(p);
+      }
+      if (uniquePosts.length === 3) break;
+    }
+
+    res.status(200).json(uniquePosts);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -138,17 +221,48 @@ app.post('/api/upload', upload.single('image'), async (req, res) => {
 app.put('/api/posts/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, content, published } = req.body;
-    const { data, error } = await supabase
+    const { title, content, published, cover_image_url, tags } = req.body;
+    
+    // 1. Update the post
+    const { data: postData, error: postError } = await supabase
       .from('posts')
-      .update({ title, content, published })
+      .update({ title, content, published, cover_image_url: cover_image_url || null })
       .eq('id', id)
-      .select();
+      .select()
+      .single();
 
-    if (error) throw error;
-    if (data.length === 0) return res.status(404).json({ error: 'Post not found' });
+    if (postError) throw postError;
+    if (!postData) return res.status(404).json({ error: 'Post not found' });
 
-    res.status(200).json(data[0]);
+    // 2. Handle Tags
+    if (tags !== undefined) {
+      // First, delete existing tags for this post
+      await supabase
+        .from('post_tags')
+        .delete()
+        .eq('post_id', id);
+
+      // Then insert new tags if any
+      if (tags.length > 0) {
+        for (const tagName of tags) {
+          // Upsert the tag
+          const { data: tagData, error: tagError } = await supabase
+            .from('tags')
+            .upsert([{ name: tagName }], { onConflict: 'name' })
+            .select()
+            .single();
+
+          if (tagError) continue;
+
+          // Link post and tag
+          await supabase
+            .from('post_tags')
+            .insert([{ post_id: id, tag_id: tagData.id }]);
+        }
+      }
+    }
+
+    res.status(200).json(postData);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

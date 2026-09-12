@@ -10,7 +10,7 @@ export default function Editor({ postToEdit, onSave, onCancel }) {
     content: '',
     tags: '', 
     published: false,
-    cover_image: ''
+    cover_image_url: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -22,7 +22,7 @@ export default function Editor({ postToEdit, onSave, onCancel }) {
         content: postToEdit.content,
         tags: postToEdit.tags ? postToEdit.tags.map(t => t.name).join(', ') : '', 
         published: postToEdit.published,
-        cover_image: postToEdit.cover_image || ''
+        cover_image_url: postToEdit.cover_image_url || ''
       });
     }
   }, [postToEdit]);
@@ -51,13 +51,19 @@ export default function Editor({ postToEdit, onSave, onCancel }) {
         method: 'POST',
         body: uploadData,
       });
+      
       const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Upload failed');
+      }
+      
       if (data.url) {
-        setFormData(prev => ({ ...prev, cover_image: data.url }));
+        setFormData(prev => ({ ...prev, cover_image_url: data.url }));
       }
     } catch (err) {
       console.error('Cover image upload failed:', err);
-      alert('Failed to upload cover image.');
+      alert(`Failed to upload cover image: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -110,6 +116,25 @@ export default function Editor({ postToEdit, onSave, onCancel }) {
       handlers: {
         image: imageHandler
       }
+    },
+    clipboard: {
+      matchVisual: false,
+      matchers: [
+        [Node.ELEMENT_NODE, (node, delta) => {
+          delta.ops = delta.ops.map(op => {
+            if (op.attributes) {
+              const allowedAttributes = ['bold', 'italic', 'underline', 'strike', 'blockquote', 'list', 'header', 'link', 'image'];
+              Object.keys(op.attributes).forEach(attr => {
+                if (!allowedAttributes.includes(attr)) {
+                  delete op.attributes[attr];
+                }
+              });
+            }
+            return op;
+          });
+          return delta;
+        }]
+      ]
     }
   }), []);
 
@@ -137,7 +162,7 @@ export default function Editor({ postToEdit, onSave, onCancel }) {
       content: formData.content,
       published: publishStatus,
       tags: tagsArray,
-      cover_image: formData.cover_image
+      cover_image_url: formData.cover_image_url
     };
 
     try {
@@ -152,7 +177,7 @@ export default function Editor({ postToEdit, onSave, onCancel }) {
       onSave(savedPost);
       
       if (!isUpdate) {
-        setFormData({ title: '', content: '', tags: '', published: false, cover_image: '' });
+        setFormData({ title: '', content: '', tags: '', published: false, cover_image_url: '' });
       }
     } catch (err) {
       setError(err.message);
@@ -162,7 +187,8 @@ export default function Editor({ postToEdit, onSave, onCancel }) {
   };
 
   // Calculate word count and read time
-  const plainTextContent = formData.content.replace(/<[^>]+>/g, '').trim();
+  const doc = new DOMParser().parseFromString(formData.content, 'text/html');
+  const plainTextContent = (doc.body.textContent || "").trim();
   const wordCount = plainTextContent ? plainTextContent.split(/\s+/).length : 0;
   const readTime = Math.ceil(wordCount / 200) || 1;
 
@@ -186,8 +212,8 @@ export default function Editor({ postToEdit, onSave, onCancel }) {
             Cover Image
           </label>
           <div className="flex items-center gap-4">
-            {formData.cover_image && (
-              <img src={formData.cover_image} alt="Cover Preview" className="h-24 w-40 object-cover rounded-lg border border-[#A599B5]/40 dark:border-[#A599B5]/20" />
+            {formData.cover_image_url && (
+              <img src={formData.cover_image_url} alt="Cover Preview" className="h-24 w-40 object-cover rounded-lg border border-[#A599B5]/40 dark:border-[#A599B5]/20" />
             )}
             <input 
               type="file" 
@@ -201,7 +227,7 @@ export default function Editor({ postToEdit, onSave, onCancel }) {
               onClick={() => coverImageInputRef.current.click()}
               className="px-4 py-2 border-2 border-dashed border-[#A599B5]/60 dark:border-[#A599B5]/40 rounded-lg text-sm font-bold text-[#56494C]/80 dark:text-[#EAE7E1]/80 hover:bg-[#A599B5]/10 dark:hover:bg-[#A599B5]/20 hover:border-[#A599B5] transition-colors"
             >
-              {formData.cover_image ? 'Change Cover Image' : '+ Add Cover Image'}
+              {formData.cover_image_url ? 'Change Cover Image' : '+ Add Cover Image'}
             </button>
           </div>
         </div>

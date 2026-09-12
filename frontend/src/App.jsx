@@ -3,11 +3,13 @@ import Dashboard from './components/Dashboard'
 import Editor from './components/Editor'
 import Feed from './components/Feed'
 import About from './components/About'
+import PostDetail from './components/PostDetail'
 import './index.css'
 
 function App() {
   const [currentView, setCurrentView] = useState('feed')
   const [postToEdit, setPostToEdit] = useState(null)
+  const [viewingPostId, setViewingPostId] = useState(null)
   const [isDarkMode, setIsDarkMode] = useState(false)
 
   useEffect(() => {
@@ -33,6 +35,21 @@ function App() {
     setCurrentView('dashboard')
   }
 
+  const handleViewPost = (id) => {
+    setViewingPostId(id)
+    setCurrentView('post')
+    window.scrollTo(0, 0)
+  }
+
+  const handleTagClickFromPost = (tag) => {
+    // When a user clicks a tag in the PostDetail view, send them to the feed with that tag in the URL
+    const params = new URLSearchParams()
+    params.set('tag', tag)
+    window.history.pushState({}, '', `/?${params.toString()}`)
+    setCurrentView('feed')
+    window.scrollTo(0, 0)
+  }
+
   return (
     <div className="min-h-screen bg-[#CDDDDD] dark:bg-[#121413] font-sans text-[#56494C] dark:text-[#EAE7E1] transition-colors duration-500">
       
@@ -41,10 +58,10 @@ function App() {
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center">
               <span 
-                className="text-3xl font-serif font-black text-[#A599B5] tracking-tight cursor-pointer hover:opacity-80 transition-opacity"
+                className="text-3xl font-serif font-black text-[#9f79d1] tracking-tight cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={() => setCurrentView('feed')}
               >
-                Dev CMS
+                Console.blog
               </span>
             </div>
             
@@ -113,9 +130,17 @@ function App() {
       </nav>
 
       <main className="pb-16">
-        {currentView === 'feed' && <Feed />}
+        {currentView === 'feed' && <Feed onViewPost={handleViewPost} />}
         {currentView === 'dashboard' && <Dashboard onEdit={handleEdit} />}
         {currentView === 'about' && <About />}
+        {currentView === 'post' && (
+          <PostDetail 
+            postId={viewingPostId} 
+            onBack={() => setCurrentView('feed')} 
+            onTagClick={handleTagClickFromPost} 
+            onViewPost={handleViewPost}
+          />
+        )}
         {currentView === 'editor' && (
           <Editor 
             postToEdit={postToEdit} 
