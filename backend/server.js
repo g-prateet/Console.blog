@@ -8,10 +8,8 @@ const app = express();
 const port = process.env.PORT || 5000;
 const upload = multer({ storage: multer.memoryStorage() });
 
-app.use(cors({
-  origin: ["https://console-blog-five.vercel.app/", "http://localhost:5173"],
-}));
-app.use(express.json());
+app.use(cors());
+app.use(express.json({ limit: '50mb' })); // Increased limit for rich text bodies
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL || 'https://yhfebrarkrplfyifscpe.supabase.co';
@@ -31,89 +29,113 @@ const getAuthClient = (req) => {
 
 // Create a new post
 app.post('/api/posts', async (req, res) => {
-  const { title, content, published, tags, cover_image_url } = req.body; 
-  const client = getAuthClient(req);
-  
-  // Enforce auth and attach user_id
-  const { data: { user }, error: authErr } = await client.auth.getUser();
-  if (authErr || !user) return res.status(401).json({ error: 'Unauthorized' });
-
-  // 1. Insert the Post
-  const { data: postData, error: postError } = await client
-    .from('posts')
-    .insert([{ 
-      title, 
-      content, 
-      published, 
-      cover_image_url: cover_image_url || null,
-      user_id: user.id 
-    }])
-    .select()
-    .single();
+  try {
+    const { title, content, published, tags, cover_image_url } = req.body; 
+    const client = getAuthClient(req);
     
-  if (postError) return res.status(500).json({ error: postError.message });
-
-  // 2. Handle Tags
-  if (tags && tags.length > 0) {
-    for (const tagName of tags) {
-      const { data: tagData, error: tagError } = await client
-        .from('tags')
-        .upsert([{ name: tagName }], { onConflict: 'name' })
-        .select()
-        .single();
-
-      if (tagError) continue;
-
-      await client
-        .from('post_tags')
-        .insert([{ post_id: postData.id, tag_id: tagData.id }]);
+    // Enforce auth and attach user_id
+    const { data: { user }, error: authErr } = await client.auth.getUser();
+    if (authErr || !user) {
+      console.error("[POST /api/posts] Auth Error:", authErr);
+      return res.status(401).json({ error: 'Unauthorized' });
     }
-  }
 
-  res.status(201).json({ message: "Post created successfully", post: postData });
+    // 1. Insert the Post
+    const { data: postData, error: postError } = await client
+      .from('posts')
+      .insert([{ 
+        title, 
+        content, 
+        published, 
+        cover_image_url: cover_image_url || null,
+        user_id: user.id 
+      }])
+      .select()
+      .single();
+      
+    if (postError) {
+      console.error("[POST /api/posts] DB Insert Error:", postError);
+      // If it's an RLS error, Supabase returns specific codes like '42501' (insufficient_privilege)
+      const status = postError.code === '42501' ? 403 : 500;
+      return res.status(status).json({ error: postError.message, details: postError });
+    }
+
+    // 2. Handle Tags
+    if (tags && tags.length > 0) {
+      for (const tagName of tags) {
+        const { data: tagData, error: tagError } = await client
+          .from('tags')
+          .upsert([{ name: tagName }], { onConflict: 'name' })
+          .select()
+          .single();
+
+        if (tagError) {
+          console.error(`[POST /api/posts] Tag Upsert Error (${tagName}):`, tagError);
+          continue;
+        }
+
+        const { error: relationError } = await client
+          .from('post_tags')
+          .insert([{ post_id: postData.id, tag_id: tagData.id }]);
+          
+        if (relationError) {
+          console.error(`[POST /api/posts] Tag Relation Error (${tagName}):`, relationError);
+        }
+      }
+    }
+
+    res.status(201).json({ message: "Post created successfully", post: postData });
+  } catch (err) {
+    console.error("[POST /api/posts] Unexpected Exception:", err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 });
 
 // Retrieve all posts
 app.get('/api/posts', async (req, res) => {
-  const { tag, search, dashboard } = req.query;
-  const client = getAuthClient(req);
+  try {
+    const { tag, search, dashboard } = req.query;
+    const client = getAuthClient(req);
 
-  let query = client.from('posts').select(`
-    *,
-    tags ( name )
-  `).order('created_at', { ascending: false });
+    let query = client.from('posts').select(`
+      *,
+      tags ( name )
+    `).order('created_at', { ascending: false });
 
-  // If fetching for public feed, restrict to published. 
-  // RLS will also enforce this, but it's good practice.
-  if (dashboard === 'true') {
-    const { data: { user } } = await client.auth.getUser();
-    if (!user) return res.status(401).json({ error: 'Unauthorized' });
-    query = query.eq('user_id', user.id);
-  } else {
-    query = query.eq('published', true);
+    if (dashboard === 'true') {
+      const { data: { user } } = await client.auth.getUser();
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      query = query.eq('user_id', user.id);
+    } else {
+      query = query.eq('published', true);
+    }
+
+    if (search) {
+      query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
+    }
+
+    const { data, error } = await query;
+      
+    if (error) {
+        console.error("[GET /api/posts] Query Error:", error);
+        return res.status(500).json({ error: error.message });
+    }
+
+    let filteredData = data;
+    if (tag) {
+      const tagArray = tag.split(',');
+      filteredData = filteredData.filter(post => {
+        if (!post.tags) return false;
+        const postTagNames = post.tags.map(t => t.name);
+        return tagArray.every(t => postTagNames.includes(t));
+      });
+    }
+
+    res.status(200).json(filteredData);
+  } catch (err) {
+    console.error("[GET /api/posts] Unexpected Exception:", err);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
-
-  if (search) {
-    query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
-  }
-
-  const { data, error } = await query;
-    
-  if (error) {
-      return res.status(500).json({ error: error.message });
-  }
-
-  let filteredData = data;
-  if (tag) {
-    const tagArray = tag.split(',');
-    filteredData = filteredData.filter(post => {
-      if (!post.tags) return false;
-      const postTagNames = post.tags.map(t => t.name);
-      return tagArray.every(t => postTagNames.includes(t));
-    });
-  }
-
-  res.status(200).json(filteredData);
 });
 
 // Retrieve all distinct tags
@@ -125,7 +147,10 @@ app.get('/api/tags', async (req, res) => {
       .select('tags!inner(name)')
       .eq('published', true);
 
-    if (error) throw error;
+    if (error) {
+      console.error("[GET /api/tags] Query Error:", error);
+      throw error;
+    }
 
     const uniqueTags = new Set();
     if (data) {
@@ -138,6 +163,7 @@ app.get('/api/tags', async (req, res) => {
 
     res.status(200).json(Array.from(uniqueTags).sort());
   } catch (err) {
+    console.error("[GET /api/tags] Unexpected Exception:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -153,7 +179,10 @@ app.get('/api/posts/:id', async (req, res) => {
       .eq('id', id)
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error(`[GET /api/posts/${id}] Query Error:`, error);
+      throw error;
+    }
     if (!data) return res.status(404).json({ error: 'Post not found' });
     
     res.status(200).json(data);
@@ -174,7 +203,10 @@ app.get('/api/posts/:id/related', async (req, res) => {
       .eq('id', id)
       .single();
 
-    if (postError) throw postError;
+    if (postError) {
+      console.error(`[GET /api/posts/${id}/related] Initial Post Query Error:`, postError);
+      throw postError;
+    }
     if (!post || !post.tags || post.tags.length === 0) {
       return res.status(200).json([]);
     }
@@ -189,7 +221,10 @@ app.get('/api/posts/:id/related', async (req, res) => {
       .neq('id', id)
       .order('created_at', { ascending: false });
 
-    if (relatedError) throw relatedError;
+    if (relatedError) {
+      console.error(`[GET /api/posts/${id}/related] Related Posts Query Error:`, relatedError);
+      throw relatedError;
+    }
 
     const uniquePosts = [];
     const seenIds = new Set();
@@ -203,6 +238,7 @@ app.get('/api/posts/:id/related', async (req, res) => {
 
     res.status(200).json(uniquePosts);
   } catch (error) {
+    console.error(`[GET /api/posts/:id/related] Unexpected Exception:`, error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -225,7 +261,11 @@ app.post('/api/upload', upload.single('image'), async (req, res) => {
         contentType: file.mimetype,
       });
 
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      console.error("[POST /api/upload] Supabase Storage Error:", uploadError);
+      const status = uploadError.statusCode || 500;
+      return res.status(status).json({ error: uploadError.message, details: uploadError });
+    }
 
     const { data: { publicUrl } } = client.storage
       .from('images')
@@ -234,7 +274,7 @@ app.post('/api/upload', upload.single('image'), async (req, res) => {
     res.status(200).json({ url: publicUrl });
 
   } catch (err) {
-    console.error("Upload error:", err);
+    console.error("[POST /api/upload] Unexpected Exception:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -254,7 +294,12 @@ app.put('/api/posts/:id', async (req, res) => {
       .select()
       .single();
 
-    if (postError) throw postError;
+    if (postError) {
+      console.error(`[PUT /api/posts/${id}] DB Update Error:`, postError);
+      const status = postError.code === '42501' ? 403 : 500;
+      return res.status(status).json({ error: postError.message, details: postError });
+    }
+    
     if (!postData) return res.status(404).json({ error: 'Post not found or unauthorized' });
 
     if (tags !== undefined) {
@@ -268,17 +313,25 @@ app.put('/api/posts/:id', async (req, res) => {
             .select()
             .single();
 
-          if (tagError) continue;
+          if (tagError) {
+            console.error(`[PUT /api/posts/${id}] Tag Upsert Error (${tagName}):`, tagError);
+            continue;
+          }
 
-          await client
+          const { error: relationError } = await client
             .from('post_tags')
             .insert([{ post_id: id, tag_id: tagData.id }]);
+            
+          if (relationError) {
+             console.error(`[PUT /api/posts/${id}] Tag Relation Error (${tagName}):`, relationError);
+          }
         }
       }
     }
 
     res.status(200).json(postData);
   } catch (error) {
+    console.error(`[PUT /api/posts/:id] Unexpected Exception:`, error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -295,11 +348,16 @@ app.delete('/api/posts/:id', async (req, res) => {
       .eq('id', id)
       .select();
 
-    if (error) throw error;
+    if (error) {
+      console.error(`[DELETE /api/posts/${id}] DB Delete Error:`, error);
+      const status = error.code === '42501' ? 403 : 500;
+      return res.status(status).json({ error: error.message });
+    }
     if (data.length === 0) return res.status(404).json({ error: 'Post not found or unauthorized' });
 
     res.status(200).json({ message: 'Post deleted successfully' });
   } catch (error) {
+    console.error(`[DELETE /api/posts/:id] Unexpected Exception:`, error);
     res.status(500).json({ error: error.message });
   }
 });
