@@ -6,10 +6,7 @@
 }
 
 @layer base {
-  html {
-    /* Dramatically scaling up the entire website UI as requested */
-    font-size: 25px;
-  }
+  html {}
   
   /* Dark mode specific global overrides */
   html.dark body {
@@ -166,4 +163,5 @@
 .dark .custom-quill-editor .ql-toolbar.ql-snow button.ql-active .ql-fill {
   fill: #7EA873 !important;
 }
+
 
